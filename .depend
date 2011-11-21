@@ -1,0 +1,2 @@
+mod_say.o: mod_say.c xbar.h mod_say.h
+xbar.o: xbar.c xbar.h config.h mod_say.h
