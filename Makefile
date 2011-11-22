@@ -8,7 +8,7 @@ EXE     = xbar
 
 OBJS    = xbar.o mod_say.o
 
-.PHONY: clean install
+.PHONY: clean install depend
 
 $(EXE): $(OBJS)
 	$(CC) $(LDFLAGS) -o $(EXE) $(OBJS)
@@ -21,5 +21,8 @@ install:
 
 .c.o:
 	$(CC) $(CFLAGS) -c $<
+
+depend:
+	$(CC) -MM *.c > .depend
 
 include .depend
