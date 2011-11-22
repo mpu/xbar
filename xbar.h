@@ -2,6 +2,7 @@
 #ifndef XBAR__H
 #define XBAR__H
 
+#include <assert.h>
 #include <stdbool.h>
 
 enum {
