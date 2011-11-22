@@ -1,2 +1,3 @@
 mod_say.o: mod_say.c xbar.h mod_say.h
-xbar.o: xbar.c xbar.h config.h mod_say.h
+mod_time.o: mod_time.c xbar.h mod_time.h
+xbar.o: xbar.c xbar.h config.h mod_say.h mod_time.h
