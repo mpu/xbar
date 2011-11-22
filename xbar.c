@@ -1,5 +1,4 @@
 /* xbar 2011 */
-#include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <signal.h>
@@ -31,6 +30,7 @@ static struct {
     Window              win;
     int                 sn;
     Display *           dsp;
+    int                 xfd;
     int                 dspw;
     GC                  gc;
     XFontStruct *       fs;
@@ -44,6 +44,7 @@ static void term(int);
 
 static void mloop(void);
 
+static bool xdirty(void);
 static void xputstr(int, const char *, int);
 static void xclearbar(void);
 static void xdrawbar(const char **, const enum Pack *);
@@ -89,6 +90,7 @@ mloop(void)
     }
 
     for (;;) {
+        struct timeval tv_delay = { .tv_usec = refresh_delay };
         int ret;
         fd_set fds;
 
@@ -115,7 +117,7 @@ mloop(void)
             return;
         }
 
-        for (m = 0; m < nmod; m++ ) {
+        for (m = 0; m < nmod; m++) {
             int i, fd;
             if (mods[m]->m_trigger & TRIG_TIME) {
                 if (md[m].md_count == 0) {
@@ -138,13 +140,28 @@ mloop(void)
                 }
             }
         }
-        if (dirty) {
+        FD_ZERO(&fds); FD_SET(xcnf.xfd, &fds);
+        ret = select(xcnf.xfd + 1, &fds, 0, 0, &tv_delay);
+        if (dirty || (ret > 0 && xdirty())) {
             xdrawbar(strs, packs);
             dirty = false;
         }
-        select(0, 0, 0, 0, &(struct timeval){ .tv_usec = refresh_delay });
         puts("looping");
     }
+}
+
+static bool
+xdirty(void)
+{
+    XEvent xev;
+    bool ret = false;
+
+    while (XPending(xcnf.dsp) > 0) {
+        XNextEvent(xcnf.dsp, &xev);
+        if (xev.type == Expose && xev.xexpose.y < bar_height)
+            ret = true;
+    }
+    return ret;
 }
 
 static void
@@ -227,7 +244,9 @@ xinit(void)
         return false;
     }
     xcnf.sn = DefaultScreen(xcnf.dsp);
+    xcnf.xfd = ConnectionNumber(xcnf.dsp);
     xcnf.win = RootWindow(xcnf.dsp, xcnf.sn);
+    XSelectInput(xcnf.dsp, xcnf.win, ExposureMask);
     if (XGetWindowAttributes(xcnf.dsp, xcnf.win, &wattr) == 0) {
         complain("Cannot retreive the size of the root window.");
         xcnf.dspw = -1;
