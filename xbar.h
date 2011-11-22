@@ -2,6 +2,8 @@
 #ifndef XBAR__H
 #define XBAR__H
 
+#include <stdbool.h>
+
 enum {
     TRIG_FD = 1,
     TRIG_TIME = 2,
@@ -17,7 +19,7 @@ struct ModInfo {
     int                 m_period;
     unsigned int        m_trigger;
     void *              m_data;
-    struct ModData *    (*m_init)(void);
+    bool                (*m_init)(struct ModData *);
     void                (*m_free)(const char *);
     char *              (*m_run)(void *, int);
 };

@@ -1,14 +1,15 @@
 #include "xbar.h"
 #include "mod_say.h"
 
-struct ModData *
-mod_say_init(void)
+bool
+mod_say_init(struct ModData * pmd)
 {
-    static struct ModData md = {
+    struct ModData md = {
         .md_count = -1,
         .md_fds = 0,
     };
-    return &md;
+    *pmd = md;
+    return true;
 }
 
 char *

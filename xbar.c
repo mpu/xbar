@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -39,6 +40,7 @@ static struct {
 
 // -- Code.
 static void complain(const char *);
+static void term(int);
 
 static void mloop(void);
 
@@ -57,6 +59,15 @@ complain(const char * msg)
 }
 
 static void
+term(int sig)
+{
+    (void) sig;
+    complain("Killed.");
+    xdeinit();
+    exit(0);
+}
+
+static void
 mloop(void)
 {
     unsigned m, nmod = 0;
@@ -67,13 +78,10 @@ mloop(void)
     bool dirty = true;
 
     for (m = 0; m < LEN(modules); m++) {
-        struct ModData * pmd = modules[m].mod.m_init();
-
-        if (pmd == NULL) {
+        if (!modules[m].mod.m_init(&md[nmod])) {
             complain("Cannot start module.");
             continue;
         }
-        md[nmod] = *pmd;
         strs[nmod] = modules[m].mod.m_run(modules[m].mod.m_data, -1);
         mods[nmod] = &modules[m].mod;
         packs[nmod] = modules[m].pack;
@@ -116,7 +124,7 @@ mloop(void)
                     strs[m] = mods[m]->m_run(mods[m]->m_data, -1);
                     dirty = true;
                     md[m].md_count = mods[m]->m_period;
-                } else
+                } else if (md[m].md_count > 0)
                     md[m].md_count--;
             }
             if (!(mods[m]->m_trigger & TRIG_FD))
@@ -257,6 +265,8 @@ main(void)
 {
     if (!xinit())
         return 1;
+    signal(SIGTERM, term);
+    signal(SIGINT, term);
     mloop();
     xdeinit();
     return 0;

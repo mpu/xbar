@@ -3,7 +3,7 @@
 
 #include "xbar.h"
 
-extern struct ModData * mod_say_init(void);
+extern bool mod_say_init(struct ModData *);
 extern char * mod_say_run(void *, int);
 
 #define MOD_SAY(s)              \
