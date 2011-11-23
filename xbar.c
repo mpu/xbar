@@ -76,8 +76,11 @@ mloop(void)
     const struct ModInfo * mods[LEN(modules)];
     enum Pack packs[LEN(modules)];
     const char * strs[LEN(modules) + 1] = { 0 };
+    fd_set read_fds;
+    int max_read_fd = 0;
     bool dirty = true;
 
+    FD_ZERO(&read_fds);
     for (m = 0; m < LEN(modules); m++) {
         if (!modules[m].mod.m_init(&md[nmod])) {
             complain("Cannot start module.");
@@ -86,30 +89,25 @@ mloop(void)
         strs[nmod] = modules[m].mod.m_run(modules[m].mod.m_data, -1);
         mods[nmod] = &modules[m].mod;
         packs[nmod] = modules[m].pack;
+        if (modules[m].mod.m_trigger & TRIG_FD) {
+            int * p;
+            for (p = md[nmod].md_fds; *p; p++) {
+                if (*p > max_read_fd)
+                    max_read_fd = *p;
+                FD_SET(*p, &read_fds);
+            }
+        }
         nmod++;
     }
 
     for (;;) {
-        struct timeval tv_delay = { .tv_usec = refresh_delay };
         int ret;
         fd_set fds;
 
         do {
-            int mxfd = 0;
-            struct timeval * ts_z = &(struct timeval){ 0, 0 };
-
-            FD_ZERO(&fds);
-            for (m = 0; m < nmod; m++ ) {
-                int i, fd;
-                if (!(mods[m]->m_trigger & TRIG_FD))
-                    continue;
-                for (i = 0; (fd = md[m].md_fds[i]); i++) {
-                    if (fd > mxfd)
-                        mxfd = fd;
-                    FD_SET(fd, &fds);
-                }
-            }
-            ret = select(mxfd + 1, &fds, 0, 0, ts_z);
+            fds = read_fds;
+            ret = select(max_read_fd + 1, &fds, 0, 0,
+                         &(struct timeval){ .tv_sec = 0 });
         } while (ret < 0 && (errno == EAGAIN || errno == EINTR));
 
         if (ret < 0) {
@@ -141,7 +139,8 @@ mloop(void)
             }
         }
         FD_ZERO(&fds); FD_SET(xcnf.xfd, &fds);
-        ret = select(xcnf.xfd + 1, &fds, 0, 0, &tv_delay);
+        ret = select(xcnf.xfd + 1, &fds, 0, 0,
+                     &(struct timeval){ .tv_usec = refresh_delay });
         if (dirty || (ret > 0 && xdirty())) {
             xdrawbar(strs, packs);
             dirty = false;
