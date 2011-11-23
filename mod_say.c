@@ -12,9 +12,9 @@ mod_say_init(struct ModData * pmd)
     return true;
 }
 
-char *
+const char *
 mod_say_run(void * p, int fd)
 {
     (void) fd;
-    return (char *)p;
+    return (const char *)p;
 }

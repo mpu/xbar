@@ -4,9 +4,9 @@
 #include "xbar.h"
 #include "mod_time.h"
 
-static char * mod_time_time(const struct tm *);
+static const char * mod_time_time(const struct tm *);
 
-static char *
+static const char *
 mod_time_time(const struct tm * tm)
 {
     static char buf[32];
@@ -38,7 +38,7 @@ mod_time_init(struct ModData * pmd)
     return true;
 }
 
-char *
+const char *
 mod_time_run(void * p, int fd)
 {
     const time_t tm = time(NULL);

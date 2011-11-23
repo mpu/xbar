@@ -22,6 +22,6 @@ struct ModInfo {
     void *              m_data;
     bool                (*m_init)(struct ModData *);
     void                (*m_free)(const char *);
-    char *              (*m_run)(void *, int);
+    const char *        (*m_run)(void *, int);
 };
 #endif /* ndef XBAR__H */

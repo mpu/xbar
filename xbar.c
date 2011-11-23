@@ -127,16 +127,15 @@ mloop(void)
                 } else if (md[m].md_count > 0)
                     md[m].md_count--;
             }
-            if (!(mods[m]->m_trigger & TRIG_FD))
-                continue;
-            for (i = 0; (fd = md[m].md_fds[i]); i++) {
-                if (FD_ISSET(fd, &fds)) {
-                    if (mods[m]->m_free && strs[m])
-                        mods[m]->m_free(strs[m]);
-                    strs[m] = mods[m]->m_run(mods[m]->m_data, fd);
-                    dirty = true;
+            if (mods[m]->m_trigger & TRIG_FD)
+                for (i = 0; (fd = md[m].md_fds[i]); i++) {
+                    if (FD_ISSET(fd, &fds)) {
+                        if (mods[m]->m_free && strs[m])
+                            mods[m]->m_free(strs[m]);
+                        strs[m] = mods[m]->m_run(mods[m]->m_data, fd);
+                        dirty = true;
+                    }
                 }
-            }
         }
         FD_ZERO(&fds); FD_SET(xcnf.xfd, &fds);
         ret = select(xcnf.xfd + 1, &fds, 0, 0,
