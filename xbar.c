@@ -34,8 +34,8 @@ static struct {
     int                 dspw;
     GC                  gc;
     XFontStruct *       fs;
-    unsigned int        fg;
-    unsigned int        bg;
+    unsigned long       fg;
+    unsigned long       bg;
 } xcnf;
 
 // -- Code.
@@ -48,7 +48,7 @@ static bool xdirty(void);
 static void xputstr(int, const char *, int);
 static void xclearbar(void);
 static void xdrawbar(const char **, const enum Pack *);
-static bool xgetpixel(const char *, unsigned *);
+static bool xgetpixel(const char *, unsigned long *);
 static bool xinit(void);
 static void xdeinit(void);
 
@@ -220,7 +220,7 @@ xdrawbar(const char ** strs, const enum Pack * packs)
 }
 
 static bool
-xgetpixel(const char * name, unsigned * pixel)
+xgetpixel(const char * name, unsigned long * pixel)
 {
     XColor xc;
 
