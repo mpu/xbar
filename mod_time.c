@@ -21,10 +21,9 @@ mod_time_time(const struct tm * tm)
     assert(tm->tm_wday < 7 && tm->tm_mon < 12 &&
            tm->tm_mday < 32 && tm->tm_hour < 60 && tm->tm_min < 60 &&
            tm->tm_year < 3000);
-    snprintf(buf, sizeof buf, "%s %s %02d %02d:%02d %d",
-             dow[tm->tm_wday], mon[tm->tm_mon],
-             tm->tm_mday, tm->tm_hour, tm->tm_min,
-             tm->tm_year + 1900);
+    snprintf(buf, sizeof buf, "%s %s %02d %d %02d:%02d",
+             dow[tm->tm_wday], mon[tm->tm_mon], tm->tm_mday,
+             tm->tm_year + 1900, tm->tm_hour, tm->tm_min);
     return buf;
 }
 
