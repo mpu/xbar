@@ -119,7 +119,7 @@ mloop(void)
             int i, fd;
             if (mods[m]->m_trigger & TRIG_TIME) {
                 if (md[m].md_count == 0) {
-                    if (strs[m] && mods[m]->m_free)
+                    if (mods[m]->m_free && strs[m])
                         mods[m]->m_free(strs[m]);
                     strs[m] = mods[m]->m_run(mods[m]->m_data, -1);
                     dirty = true;
@@ -131,7 +131,7 @@ mloop(void)
                 continue;
             for (i = 0; (fd = md[m].md_fds[i]); i++) {
                 if (FD_ISSET(fd, &fds)) {
-                    if (strs[m] && mods[m]->m_free)
+                    if (mods[m]->m_free && strs[m])
                         mods[m]->m_free(strs[m]);
                     strs[m] = mods[m]->m_run(mods[m]->m_data, fd);
                     dirty = true;
