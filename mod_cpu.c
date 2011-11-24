@@ -3,18 +3,19 @@
 #include "xbar.h"
 #include "mod_cpu.h"
 
-struct CpuLoad {
+struct CpuInfo {
     unsigned cpu_user;
     unsigned cpu_sys;
     unsigned cpu_tot;
 };
 
-static struct CpuLoad last_load;
+static struct CpuInfo last_info;
+static unsigned last_load;
 
-static bool mod_cpu_fetch(struct CpuLoad *);
+static bool mod_cpu_fetch(struct CpuInfo *);
 
 static bool
-mod_cpu_fetch(struct CpuLoad * load)
+mod_cpu_fetch(struct CpuInfo * load)
 {
     int read;
     unsigned nice, idle;
@@ -47,24 +48,22 @@ mod_cpu_run(void * p, int fd)
 {
     static const char up[] = "Updating...";
     static char buf[32];
-    unsigned load;
-    struct CpuLoad ld;
+    struct CpuInfo info;
 
     (void) fd;
-    if (last_load.cpu_tot == 0) {
-        mod_cpu_fetch(&last_load);
+    if (last_info.cpu_tot == 0) {
+        mod_cpu_fetch(&last_info);
         return up;
     }
-    if (!mod_cpu_fetch(&ld)) {
+    if (!mod_cpu_fetch(&info)) {
         fputs("Cannot fetch cpu info.\n", stderr);
         return up;
     }
-    if (ld.cpu_tot == last_load.cpu_tot)
-        return up;
-    load = 100 * (ld.cpu_user        + ld.cpu_sys
-                 -last_load.cpu_user - last_load.cpu_sys) /
-                 (ld.cpu_tot - last_load.cpu_tot);
-    snprintf(buf, sizeof buf, (const char *)p, load);
-    last_load = ld;
+    if (info.cpu_tot != last_info.cpu_tot)
+        last_load = 100 * (info.cpu_user      + info.cpu_sys
+                          -last_info.cpu_user - last_info.cpu_sys) /
+                          (info.cpu_tot - last_info.cpu_tot);
+    snprintf(buf, sizeof buf, (const char *)p, last_load);
+    last_info = info;
     return buf;
 }
