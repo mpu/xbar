@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include "xbar.h"
@@ -11,10 +12,10 @@
 #define LINE_LEN 512
 #define SHELL "/bin/sh"
 
-static bool mod_cmd_fork_process(int *, const char *);
+static bool mod_cmd_fork_process(pid_t *, int *, const char *);
 
 static bool
-mod_cmd_fork_process(int * ofd, const char * cmd)
+mod_cmd_fork_process(pid_t * ppid, int * pfd, const char * cmd)
 {
     pid_t pid;
     int fildes[2];
@@ -32,7 +33,8 @@ mod_cmd_fork_process(int * ofd, const char * cmd)
         abort();
     } else if (pid > 0) {
         close(fildes[1]);
-        *ofd = fildes[0];
+        *pfd = fildes[0];
+        *ppid = pid;
         return true;
     } else {
         perror("mod_cmd_fork_process");
@@ -58,13 +60,15 @@ mod_cmd_run(void * p, int ufd)
     static char line[LINE_LEN];
     char * cr;
     ssize_t rd;
-    int fd;
+    pid_t pid;
+    int status, fd;
 
     (void) ufd;
-    if (!mod_cmd_fork_process(&fd, (const char *)p))
+    if (!mod_cmd_fork_process(&pid, &fd, (const char *)p))
         return err;
     rd = read(fd, line, sizeof line - 1);
     close(fd);
+    waitpid(pid, &status, 0);
     if (rd < 0) {
         perror("mod_cmd_run");
         return err;
