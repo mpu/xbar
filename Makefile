@@ -6,7 +6,7 @@ CFLAGS  = -g -std=c99 -pedantic -Wall -Wextra -Wunused -Wwrite-strings `pkg-conf
 LDFLAGS = `pkg-config --libs x11`
 EXE     = xbar
 
-OBJS    = xbar.o mod_say.o mod_time.o mod_cpu.o
+OBJS    = xbar.o mod_say.o mod_time.o mod_cpu.o mod_bat.o
 
 .PHONY: clean install depend
 
