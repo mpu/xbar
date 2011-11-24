@@ -3,7 +3,7 @@
 PREFIX  = /usr
 CC      = clang
 CFLAGS  = -g -std=c99 -pedantic -Wall -Wextra -Wunused -Wwrite-strings `pkg-config --cflags x11`
-LDFLAGS = `pkg-config --libs x11` -pthreads
+LDFLAGS = `pkg-config --libs x11`
 EXE     = xbar
 
 OBJS    = xbar.o mod_say.o mod_time.o mod_cpu.o

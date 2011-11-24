@@ -1,12 +1,7 @@
-#include <pthread.h>
 #include <stdio.h>
-#include <unistd.h>
 
 #include "xbar.h"
 #include "mod_cpu.h"
-
-static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
-static unsigned load;
 
 struct CpuLoad {
     unsigned cpu_user;
@@ -14,8 +9,9 @@ struct CpuLoad {
     unsigned cpu_tot;
 };
 
+static struct CpuLoad last_load;
+
 static bool mod_cpu_fetch(struct CpuLoad *);
-static void * mod_cpu_probe(void *);
 
 static bool
 mod_cpu_fetch(struct CpuLoad * load)
@@ -35,47 +31,13 @@ mod_cpu_fetch(struct CpuLoad * load)
     return true;
 }
 
-static void *
-mod_cpu_probe(void * p)
-{
-    struct CpuLoad load0, load1;
-
-    (void) p;
-    if (!mod_cpu_fetch(&load0))
-        goto err_fetch;
-    for (;;) {
-        sleep(1);
-        if (!mod_cpu_fetch(&load1))
-            goto err_fetch;
-        if (pthread_mutex_lock(&lock))
-            continue;
-        load = 100 * (load1.cpu_user + load1.cpu_sys
-                     -load0.cpu_user - load0.cpu_sys) /
-                     (load1.cpu_tot - load0.cpu_tot);
-        /* printf("user: %d\n", load1.cpu_user); */
-        pthread_mutex_unlock(&lock);
-        load0 = load1;
-    }
-    return 0;
-
-err_fetch:
-    fputs("Cannot fetch CPU info.\n", stderr);
-    return 0;
-}
-
 bool
 mod_cpu_init(struct ModData * pmd)
 {
-    pthread_t pth;
     struct ModData md = {
-        .md_count = 3,
+        .md_count = 0,
         .md_fds = 0,
     };
-
-    if (pthread_create(&pth, NULL, mod_cpu_probe, NULL)) {
-        perror("mod_cpu_init");
-        return false;
-    }
     *pmd = md;
     return true;
 }
@@ -83,13 +45,26 @@ mod_cpu_init(struct ModData * pmd)
 const char *
 mod_cpu_run(void * p, int fd)
 {
-    static const char err[] = "mod_cpu: err";
+    static const char up[] = "Updating...";
     static char buf[32];
+    unsigned load;
+    struct CpuLoad ld;
 
     (void) fd;
-    if (pthread_mutex_lock(&lock))
-        return err;
+    if (last_load.cpu_tot == 0) {
+        mod_cpu_fetch(&last_load);
+        return up;
+    }
+    if (!mod_cpu_fetch(&ld)) {
+        fputs("Cannot fetch cpu info.\n", stderr);
+        return up;
+    }
+    if (ld.cpu_tot == last_load.cpu_tot)
+        return up;
+    load = 100 * (ld.cpu_user        + ld.cpu_sys
+                 -last_load.cpu_user - last_load.cpu_sys) /
+                 (ld.cpu_tot - last_load.cpu_tot);
     snprintf(buf, sizeof buf, (const char *)p, load);
-    pthread_mutex_unlock(&lock);
+    last_load = ld;
     return buf;
 }
