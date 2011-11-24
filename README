@@ -1,0 +1,36 @@
+xbar - Minimalistic monitoring for X11.
+
+License: MIT/X (See LICENSE).
+
+xbar is intended to be a very light resource monitoring tool. Up to
+know, it seems to be the case.
+
+xbar is xmobar[1] without "mo". xmobar is a great tool but I found it
+too expensive to run, it consumes a lot of memory and spends too much
+cpu time. However it is a high level tool and can be easily extended.
+
+xbar keeps the modular design of xmobar but does not do many
+abstractions to stay near the bare metal. It is written in C, thus it
+has an extensive control of all resources and try to minimize their
+usage. xmobar plugins are now called "modules" and can be written in
+an easy way without knowing too much of xbar internals (see for
+instance mod_say.c).
+
+xbar, as xmonad[2], dwm[3], and a bunch of other high quality programs
+is customized via editing its source code. However, don't be afraid,
+you will only have to modify one source file (config.h) and the
+preprocessor makes it easy.
+
+xbar is still experimental and has several problems, it is not yet as
+mature as xmobar; there is no colors support, no utf8 support and many
+"modules" have to be written. Moreover, it is not yet guaranteed to be
+portable.
+
+If you create a module, or add an extra feature, I will be glad to
+merge your code inside xbar.
+
+[1] http://gorgias.mine.nu/xmobar/
+[2] http://xmonad.org/
+[3] http://dwm.suckless.org/
+
+vim: set tw=70:
