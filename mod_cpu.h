@@ -7,7 +7,7 @@ extern bool mod_cpu_init(struct ModData *);
 extern const char * mod_cpu_run(void *, int);
 
 #define MOD_CPU(fmt)            \
-    (struct ModInfo){           \
+    (struct ModInfo) {          \
         .m_name = "mod_cpu",    \
         .m_period = 0,          \
         .m_trigger = TRIG_TIME, \
@@ -17,4 +17,4 @@ extern const char * mod_cpu_run(void *, int);
         .m_free = NULL,         \
     }
 
-#endif /* MOD_CPU__H */
+#endif /* ndef MOD_CPU__H */

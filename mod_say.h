@@ -13,8 +13,8 @@ extern const char * mod_say_run(void *, int);
         .m_trigger = 0,         \
         .m_data = (void *)s,    \
         .m_init = mod_say_init, \
-        .m_free = NULL,         \
         .m_run = mod_say_run,   \
+        .m_free = NULL,         \
     }
 
 #endif /* ndef MOD_SAY__H */

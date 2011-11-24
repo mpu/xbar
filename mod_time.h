@@ -17,4 +17,4 @@ extern const char * mod_time_run(void *, int);
         .m_free = NULL,                 \
     }
 
-#endif /* MOD_TIME__H */
+#endif /* ndef MOD_TIME__H */

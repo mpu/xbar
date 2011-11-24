@@ -1,6 +1,6 @@
-/* xbar.h - Common data structures. */
 #ifndef XBAR__H
 #define XBAR__H
+/* xbar.h - Common data structures. */
 
 #include <assert.h>
 #include <stdbool.h>
