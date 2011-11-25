@@ -23,7 +23,7 @@ mod_bat_run(void * p, int fd)
     static const char * err = "mod_bat: Error";
     const char ** data = p;
     const char prefix[] = "/sys/class/power_supply/";
-    const int prefix_len = sizeof prefix + strlen(data[0]) - 1;
+    const size_t prefix_len = sizeof prefix + strlen(data[0]) - 1;
     char * fname;
     const char * ret = buf;
     FILE * fnow, * ffull;
