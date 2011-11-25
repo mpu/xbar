@@ -29,4 +29,4 @@ static const char fgcolor[] = "gray90";
 static const char bgcolor[] = "black";
 
 /* The refresh delay in nano seconds. */
-static const int refresh_delay = 1500000;
+static const unsigned refresh_delay = 1500000;

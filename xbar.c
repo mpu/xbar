@@ -7,6 +7,7 @@
 
 #include <errno.h>
 #include <sys/select.h>
+#include <sys/time.h>
 
 #include <X11/Xlib.h>
 
@@ -41,6 +42,7 @@ static struct {
 // -- Code.
 static void complain(const char *);
 static void term(int);
+static long long utime(void);
 
 static void mloop(void);
 
@@ -68,6 +70,14 @@ term(int sig)
     exit(0);
 }
 
+static long long
+utime(void)
+{
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (tv.tv_sec * 1000000 + tv.tv_usec);
+}
+
 static void
 mloop(void)
 {
@@ -76,6 +86,7 @@ mloop(void)
     const struct ModInfo * mods[LEN(modules)];
     enum Pack packs[LEN(modules)];
     const char * strs[LEN(modules) + 1] = { 0 };
+    long long start = utime();
     fd_set read_fds;
     int max_read_fd = 0;
     bool dirty = true;
@@ -90,19 +101,20 @@ mloop(void)
         mods[nmod] = &modules[m].mod;
         packs[nmod] = modules[m].pack;
         if (modules[m].mod.m_trigger & TRIG_FD) {
-            int * p;
-            for (p = md[nmod].md_fds; *p; p++) {
-                if (*p > max_read_fd)
-                    max_read_fd = *p;
-                FD_SET(*p, &read_fds);
+            int i, fd;
+            for (i = 0; (fd = md[nmod].md_fds[i]); i++) {
+                if (fd > max_read_fd)
+                    max_read_fd = fd;
+                FD_SET(fd, &read_fds);
             }
         }
         nmod++;
     }
 
     for (;;) {
-        int ret;
+        long long time = start;
         fd_set fds;
+        int ret;
 
         do {
             fds = read_fds;
@@ -137,13 +149,17 @@ mloop(void)
                     }
                 }
         }
-        FD_ZERO(&fds); FD_SET(xcnf.xfd, &fds);
-        ret = select(xcnf.xfd + 1, &fds, 0, 0,
-                     &(struct timeval){ .tv_usec = refresh_delay });
-        if (dirty || (ret > 0 && xdirty())) {
-            xdrawbar(strs, packs);
-            dirty = false;
-        }
+        do {
+            unsigned wait = refresh_delay + (start - time);
+            FD_ZERO(&fds); FD_SET(xcnf.xfd, &fds);
+            ret = select(xcnf.xfd + 1, &fds, 0, 0,
+                         &(struct timeval){ .tv_usec = wait });
+            if (dirty || (ret > 0 && xdirty())) {
+                xdrawbar(strs, packs);
+                dirty = false;
+            }
+        } while ((time = utime()) < start + refresh_delay);
+        start = time;
         puts("looping");
     }
 }
@@ -189,7 +205,7 @@ xdrawbar(const char ** strs, const enum Pack * packs)
 
     xclearbar();
     for (firstl = firstr = true; *strs; packs++, strs++) {
-        int len = strlen(*strs);
+        size_t len = strlen(*strs);
 
         switch (*packs) {
         case PACK_LEFT:
