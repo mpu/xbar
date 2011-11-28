@@ -21,9 +21,9 @@ mod_bat_run(void * p, int fd)
 {
     static char buf[32];
     static const char * err = "mod_bat: Error";
-    const char ** data = p;
+    const struct BatData * data = p;
     const char prefix[] = "/sys/class/power_supply/";
-    const size_t prefix_len = sizeof prefix + strlen(data[0]) - 1;
+    const size_t prefix_len = sizeof prefix + strlen(data->bat) - 1;
     char * fname;
     const char * ret = buf;
     FILE * fnow, * ffull;
@@ -33,7 +33,7 @@ mod_bat_run(void * p, int fd)
     if ((fname = malloc(prefix_len + 1 + 12)) == NULL)
         return err;
     strcpy(fname, prefix);
-    strcat(fname, data[0]);
+    strcat(fname, data->bat);
     strcpy(&fname[prefix_len], "/charge_now");
     fnow = fopen(fname, "r");
     strcpy(&fname[prefix_len], "/charge_full");
@@ -45,7 +45,7 @@ mod_bat_run(void * p, int fd)
         ret = err;
         goto eio;
     }
-    snprintf(buf, sizeof buf, data[1], 100 * chnow / chfull);
+    snprintf(buf, sizeof buf, data->fmt, 100 * chnow / chfull);
 
 eio:
     free(fname);
