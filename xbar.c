@@ -50,7 +50,7 @@ static bool xdirty(void);
 static void xputstr(int *, enum Pack, const char *, int);
 static void xclearbar(void);
 static void xdrawbar(const char **, const enum Pack *);
-static bool xgetpixel(const char *, unsigned long *);
+static unsigned long xgetpixel(const char *, unsigned long);
 static bool xinit(void);
 static void xdeinit(void);
 
@@ -226,18 +226,17 @@ xdrawbar(const char ** strs, const enum Pack * packs)
     XFlush(xcnf.dsp);
 }
 
-static bool
-xgetpixel(const char * name, unsigned long * pixel)
+static unsigned long
+xgetpixel(const char * name, unsigned long def)
 {
     XColor xc;
 
     if (!XAllocNamedColor(xcnf.dsp, DefaultColormap(xcnf.dsp, xcnf.sn),
                           name, &xc, &xc)) {
         complain("Cannot allocate color.");
-        return false;
+        return def;
     }
-    *pixel = xc.pixel;
-    return true;
+    return xc.pixel;
 }
 
 static bool
@@ -264,10 +263,8 @@ xinit(void)
         complain("Cannot load font.");
         return false;
     }
-    if (!xgetpixel(fgcolor, &xcnf.fg) || !xgetpixel(bgcolor, &xcnf.bg)) {
-        xcnf.fg = WhitePixel(xcnf.dsp, xcnf.sn);
-        xcnf.bg = BlackPixel(xcnf.dsp, xcnf.sn);
-    }
+    xcnf.fg = xgetpixel(fgcolor, WhitePixel(xcnf.dsp, xcnf.sn));
+    xcnf.bg = xgetpixel(bgcolor, BlackPixel(xcnf.dsp, xcnf.sn));
     gcv = (XGCValues) {
         .foreground = xcnf.fg,
         .background = xcnf.bg,
