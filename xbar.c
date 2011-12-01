@@ -47,7 +47,7 @@ static long long utime(void);
 static void mloop(void);
 
 static bool xdirty(void);
-static void xputstr(int, const char *, int);
+static void xputstr(int *, enum Pack, const char *, int);
 static void xclearbar(void);
 static void xdrawbar(const char **, const enum Pack *);
 static bool xgetpixel(const char *, unsigned long *);
@@ -179,10 +179,22 @@ xdirty(void)
 }
 
 static void
-xputstr(int x, const char * str, int len)
+xputstr(int * x, enum Pack pack, const char * str, int len)
 {
     const int y = xcnf.fs->max_bounds.ascent + 1;
-    XDrawImageString(xcnf.dsp, xcnf.win, xcnf.gc, x , y, str, len);
+    const int wid = XTextWidth(xcnf.fs, str, len);
+
+    switch (pack) {
+    case PACK_LEFT:
+        XDrawImageString(xcnf.dsp, xcnf.win, xcnf.gc, *x , y, str, len);
+        *x += wid;
+        break;
+
+    case PACK_RIGHT:
+        *x -= wid;
+        XDrawImageString(xcnf.dsp, xcnf.win, xcnf.gc, *x , y, str, len);
+        break;
+    }
 }
 
 static void
@@ -199,36 +211,17 @@ xclearbar(void)
 static void
 xdrawbar(const char ** strs, const enum Pack * packs)
 {
-    const int sep_width = XTextWidth(xcnf.fs, sep, LEN(sep) - 1);
-    bool firstl, firstr;
-    int xl = 0, xr = xcnf.dspw;
+    bool first[2] = { true, true };
+    int x[2] = { [PACK_RIGHT] = xcnf.dspw < 0 ? 800 : xcnf.dspw };
 
     xclearbar();
-    for (firstl = firstr = true; *strs; packs++, strs++) {
-        size_t len = strlen(*strs);
-
-        switch (*packs) {
-        case PACK_LEFT:
-            if (!firstl) {
-                xputstr(xl, sep, LEN(sep) - 1);
-                xl += sep_width;
-            } else
-                firstl = false;
-            xputstr(xl, *strs, len);
-            xl += XTextWidth(xcnf.fs, *strs, len);
-            break;
-
-        case PACK_RIGHT:
-            if (xr < 0)
-                continue;
-            if (!firstr) {
-                xr -= sep_width;
-                xputstr(xr, sep, LEN(sep) - 1);
-            } else
-                firstr = false;
-            xr -= XTextWidth(xcnf.fs, *strs, len);
-            xputstr(xr, *strs, len);
-        }
+    for (; *strs; packs++, strs++) {
+        assert(*packs < 2);
+        if (!first[*packs])
+            xputstr(&x[*packs], *packs, sep, LEN(sep) - 1);
+        else
+            first[*packs] = false;
+        xputstr(&x[*packs], *packs, *strs, strlen(*strs));
     }
     XFlush(xcnf.dsp);
 }
