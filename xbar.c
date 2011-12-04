@@ -15,6 +15,11 @@
 
 #define LEN(a) (sizeof a / sizeof a[0])
 
+/* MAX_CMDS - Maximum number of consecutive commands in a string given to
+ * xputfstr. This can be customized in "config.h".
+ */
+#define MAX_CMDS 64
+
 enum Pack {
     PACK_LEFT,
     PACK_RIGHT,
@@ -40,8 +45,8 @@ static struct {
 } xcnf;
 
 static struct PixelEntry {
-    char * name;
-    unsigned long pixel;
+    char *              name;
+    unsigned long       pixel;
     struct PixelEntry * next;
 } * pixcache[256];
 
@@ -53,7 +58,8 @@ static long long utime(void);
 static void mloop(void);
 
 static bool xdirty(void);
-static void xputstr(int *, enum Pack, const char *, int);
+static void xputstr(int, unsigned long, const char *, int);
+static void xputfstr(int *, enum Pack, const char *);
 static void xclearbar(void);
 static void xdrawbar(const char **, const enum Pack *);
 static unsigned long xgetpixel(const char *, unsigned long);
@@ -185,20 +191,92 @@ xdirty(void)
 }
 
 static void
-xputstr(int * x, enum Pack pack, const char * str, int len)
+xputstr(int x, unsigned long fg, const char * str, int len)
 {
     const int y = xcnf.fs->max_bounds.ascent + 1;
-    const int wid = XTextWidth(xcnf.fs, str, len);
 
+    assert(len > 0);
+    XSetForeground(xcnf.dsp, xcnf.gc, fg);
+    XDrawString(xcnf.dsp, xcnf.win, xcnf.gc, x , y, str, len);
+}
+
+static void
+xputfstr(int * x, enum Pack pack, const char * str)
+{
+    struct DrawData {
+        unsigned long   fg;
+        int             len;
+        const char *    str;
+    } strings[MAX_CMDS];
+    unsigned sid = 0;
+    unsigned long fg = xcnf.fg;
+    int len = 0;
+    const char * p = str;
+
+    while (*p) {
+        char * lparen, * rparen;
+
+        if (*p != '^') {
+            p++, len++;
+            continue;
+        }
+        if ((lparen = strchr(p, '(')) == NULL ||
+            (rparen = strchr(lparen + 1, ')')) == NULL) {
+            complain("Syntax error in display string.");
+            p++, len++;
+            continue;
+        }
+        if (sid >= LEN(strings))
+            break;
+        if (len)
+            strings[sid++] = (struct DrawData) {
+                .fg = fg,
+                .len = len,
+                .str = str
+            };
+        if (strncmp(p + 1, "fg(", 3) == 0) {
+            const size_t fg_len = rparen - lparen - 1;
+            char fg_str[64];
+
+            if (fg_len >= 64) {
+                complain("Color string too long in 'fg' command.");
+                goto nextchunk;
+            }
+            if (fg_len == 0) {
+                fg = xcnf.fg;
+                goto nextchunk;
+            }
+            strncpy(fg_str, lparen + 1, fg_len);
+            fg_str[fg_len] = 0;
+            fg = xgetpixel(fg_str, xcnf.fg);
+        } else
+            complain("Unknown command in display string.");
+nextchunk:
+        str = p = rparen + 1;
+        len = 0;
+    }
+    if (len && sid < LEN(strings))
+        strings[sid++] = (struct DrawData) {
+            .fg = fg,
+            .len = len,
+            .str = str
+        };
     switch (pack) {
     case PACK_LEFT:
-        XDrawImageString(xcnf.dsp, xcnf.win, xcnf.gc, *x , y, str, len);
-        *x += wid;
+        for (unsigned i = 0; i < sid; i++) {
+            const int wid =
+                XTextWidth(xcnf.fs, strings[i].str, strings[i].len);
+            xputstr(*x, strings[i].fg, strings[i].str, strings[i].len);
+            *x += wid;
+        }
         break;
-
     case PACK_RIGHT:
-        *x -= wid;
-        XDrawImageString(xcnf.dsp, xcnf.win, xcnf.gc, *x , y, str, len);
+        for (unsigned j = 0, i = sid - 1; j < sid; j++, i--) {
+            const int wid =
+                XTextWidth(xcnf.fs, strings[i].str, strings[i].len);
+            *x -= wid;
+            xputstr(*x, strings[i].fg, strings[i].str, strings[i].len);
+        }
         break;
     }
 }
@@ -222,10 +300,10 @@ xdrawbar(const char ** strs, const enum Pack * packs)
     for (; *strs; packs++, strs++) {
         assert(*packs < 2);
         if (!first[*packs])
-            xputstr(&x[*packs], *packs, sep, LEN(sep) - 1);
+            xputfstr(&x[*packs], *packs, sep);
         else
             first[*packs] = false;
-        xputstr(&x[*packs], *packs, *strs, strlen(*strs));
+        xputfstr(&x[*packs], *packs, *strs);
     }
     XFlush(xcnf.dsp);
 }
