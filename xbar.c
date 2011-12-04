@@ -39,6 +39,12 @@ static struct {
     unsigned long       bg;
 } xcnf;
 
+static struct PixelEntry {
+    char * name;
+    unsigned long pixel;
+    struct PixelEntry * next;
+} * pixcache[256];
+
 // -- Code.
 static void complain(const char *);
 static void term(int);
@@ -75,7 +81,7 @@ utime(void)
 {
     struct timeval tv;
     gettimeofday(&tv, NULL);
-    return (tv.tv_sec * 1000000 + tv.tv_usec);
+    return tv.tv_sec * 1000000 + tv.tv_usec;
 }
 
 static void
@@ -200,11 +206,9 @@ xputstr(int * x, enum Pack pack, const char * str, int len)
 static void
 xclearbar(void)
 {
-    const int clear_width = xcnf.dspw < 0 ? 800 : xcnf.dspw;
-
     XSetForeground(xcnf.dsp, xcnf.gc, xcnf.bg);
     XFillRectangle(xcnf.dsp, xcnf.win, xcnf.gc,
-                   0, 0, clear_width, bar_height);
+                   0, 0, xcnf.dspw, bar_height);
     XSetForeground(xcnf.dsp, xcnf.gc, xcnf.fg);
 }
 
@@ -212,7 +216,7 @@ static void
 xdrawbar(const char ** strs, const enum Pack * packs)
 {
     bool first[2] = { true, true };
-    int x[2] = { [PACK_RIGHT] = xcnf.dspw < 0 ? 800 : xcnf.dspw };
+    int x[2] = { [PACK_RIGHT] = xcnf.dspw };
 
     xclearbar();
     for (; *strs; packs++, strs++) {
@@ -229,14 +233,36 @@ xdrawbar(const char ** strs, const enum Pack * packs)
 static unsigned long
 xgetpixel(const char * name, unsigned long def)
 {
+    struct PixelEntry ** ppe, * pe;
+    unsigned long pixel;
+    unsigned hash = 0;
     XColor xc;
+
+    for (const char * p = name; *p; p++)
+        hash = hash * 19 + *p;
+    hash &= 255;
+
+    for (ppe = &pixcache[hash]; (pe = *ppe); ppe = &(*ppe)->next)
+        if (strcmp(pe->name, name) == 0)
+            return pe->pixel;
 
     if (!XAllocNamedColor(xcnf.dsp, DefaultColormap(xcnf.dsp, xcnf.sn),
                           name, &xc, &xc)) {
         complain("Cannot allocate color.");
-        return def;
+        pixel = def;
+    } else
+        pixel = xc.pixel;
+
+    if ((*ppe = pe = malloc(sizeof(struct PixelEntry))) &&
+        (pe->name = malloc(strlen(name) + 1))) {
+        strcpy(pe->name, name);
+        pe->pixel = pixel;
+        pe->next = NULL;
+    } else if (pe && pe->name == NULL) {
+        free(pe);
+        *ppe = NULL;
     }
-    return xc.pixel;
+    return pixel;
 }
 
 static bool
@@ -255,7 +281,7 @@ xinit(void)
     XSelectInput(xcnf.dsp, xcnf.win, ExposureMask);
     if (XGetWindowAttributes(xcnf.dsp, xcnf.win, &wattr) == 0) {
         complain("Cannot retreive the size of the root window.");
-        xcnf.dspw = -1;
+        xcnf.dspw = 800;
     } else
         xcnf.dspw = wattr.width;
     if ((xcnf.fs = XLoadQueryFont(xcnf.dsp, font)) == NULL) {
@@ -278,6 +304,15 @@ xinit(void)
 static void
 xdeinit(void)
 {
+    for (unsigned i = 0; i < LEN(pixcache); i++) {
+        struct PixelEntry * pn, * pe = pixcache[i];
+        while (pe) {
+            pn = pe->next;
+            free(pe->name);
+            free(pe);
+            pe = pn;
+        }
+    }
     XFreeGC(xcnf.dsp, xcnf.gc);
     XFreeFont(xcnf.dsp, xcnf.fs);
     XCloseDisplay(xcnf.dsp);
