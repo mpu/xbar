@@ -18,7 +18,7 @@
 /* MAX_CMDS - Maximum number of consecutive commands in a string given to
  * xputfstr. This can be customized in "config.h".
  */
-#define MAX_CMDS 64
+#define MAX_CMDS 32
 
 enum Pack {
     PACK_LEFT,
@@ -31,6 +31,15 @@ struct Module {
 };
 
 #include "config.h"
+
+struct ModRuntime {
+    unsigned                    mr_id;
+    enum Pack                   mr_pack;
+    struct ModData              mr_data;
+    const struct ModInfo *      mr_info;
+    struct ModRuntime *         mr_nextfd;
+    struct ModRuntime *         mr_nexttime;
+};
 
 static struct {
     Window              win;
@@ -55,6 +64,8 @@ static void complain(const char *);
 static void term(int);
 static long long utime(void);
 
+static unsigned minit(struct ModRuntime *,
+                      struct ModRuntime **, struct ModRuntime **);
 static void mloop(void);
 
 static bool xdirty(void);
@@ -90,89 +101,111 @@ utime(void)
     return tv.tv_sec * 1000000 + tv.tv_usec;
 }
 
+static unsigned
+minit(struct ModRuntime * marr,
+      struct ModRuntime ** fsttime, struct ModRuntime ** fstfd)
+{
+    unsigned mid = 0;
+
+    for (unsigned m = 0; m < LEN(modules); m++) {
+        if (!modules[m].mod.m_init(&marr->mr_data)) {
+            complain("Cannot init module.");
+            continue;
+        }
+        marr->mr_id = mid;
+        marr->mr_info = &modules[m].mod;
+        marr->mr_pack = modules[m].pack;
+        marr->mr_nextfd = marr->mr_nexttime = NULL;
+        if (modules[m].mod.m_trigger & TRIG_FD) {
+            *fstfd = marr;
+            fstfd = &marr->mr_nextfd;
+        }
+        if (modules[m].mod.m_trigger & TRIG_TIME) {
+            *fsttime = marr;
+            fsttime = &marr->mr_nexttime;
+        }
+        marr++;
+        mid++;
+    }
+    *fsttime = *fstfd = NULL;
+    return mid;
+}
+
 static void
 mloop(void)
 {
-    unsigned m, nmod = 0;
-    struct ModData md[LEN(modules)];
-    const struct ModInfo * mods[LEN(modules)];
+    unsigned nmods;
+    struct ModRuntime mods[LEN(modules)];
+    struct ModRuntime * fsttime, * fstfd;
+    const char * strs[LEN(modules) + 1];
     enum Pack packs[LEN(modules)];
-    const char * strs[LEN(modules) + 1] = { 0 };
     long long start = utime();
-    fd_set read_fds;
-    int max_read_fd = 0;
+    fd_set modfds;
+    int maxfd = xcnf.xfd;
     bool dirty = true;
 
-    FD_ZERO(&read_fds);
-    for (m = 0; m < LEN(modules); m++) {
-        if (!modules[m].mod.m_init(&md[nmod])) {
-            complain("Cannot start module.");
-            continue;
-        }
-        strs[nmod] = modules[m].mod.m_run(modules[m].mod.m_data, -1);
-        mods[nmod] = &modules[m].mod;
-        packs[nmod] = modules[m].pack;
-        if (modules[m].mod.m_trigger & TRIG_FD) {
-            int i, fd;
-            for (i = 0; (fd = md[nmod].md_fds[i]); i++) {
-                if (fd > max_read_fd)
-                    max_read_fd = fd;
-                FD_SET(fd, &read_fds);
-            }
-        }
-        nmod++;
+    /* Initialize modules. */
+    nmods = minit(mods, &fsttime, &fstfd);
+    strs[nmods] = NULL;
+    for (unsigned m = 0; m < nmods; m++) {
+        assert(mods[m].mr_id == m); // Simple (programmer's) sanity check.
+        strs[m] = mods[m].mr_info->m_run(mods[m].mr_info->m_data, -1);
+        packs[m] = mods[m].mr_pack;
     }
+    FD_ZERO(&modfds); FD_SET(xcnf.xfd, &modfds);
+    for (struct ModRuntime * m = fstfd; m; m = m->mr_nextfd)
+        for (int fd, i = 0; (fd = m->mr_data.md_fds[i]) > 0; i++) {
+            if (fd > maxfd)
+                maxfd = fd;
+            FD_SET(fd, &modfds);
+        }
+    maxfd++;
 
     for (;;) {
         long long time = start;
-        fd_set fds;
-        int ret;
 
-        do {
-            fds = read_fds;
-            ret = select(max_read_fd + 1, &fds, 0, 0,
-                         &(struct timeval){ .tv_sec = 0 });
-        } while (ret < 0 && (errno == EAGAIN || errno == EINTR));
+        for (struct ModRuntime * m = fsttime; m; m = m->mr_nexttime)
+            if (m->mr_data.md_count == 0) {
+                const struct ModInfo * mod = m->mr_info;
+                if (mod->m_free && strs[m->mr_id])
+                    mod->m_free(strs[m->mr_id]);
+                strs[m->mr_id] = mod->m_run(mod->m_data, -1);
+                dirty = true;
+            } else if (m->mr_data.md_count > 0)
+                m->mr_data.md_count--;
 
-        if (ret < 0) {
-            complain("Select failed.");
-            return;
-        }
-
-        for (m = 0; m < nmod; m++) {
-            int i, fd;
-            if (mods[m]->m_trigger & TRIG_TIME) {
-                if (md[m].md_count == 0) {
-                    if (mods[m]->m_free && strs[m])
-                        mods[m]->m_free(strs[m]);
-                    strs[m] = mods[m]->m_run(mods[m]->m_data, -1);
-                    dirty = true;
-                    md[m].md_count = mods[m]->m_period;
-                } else if (md[m].md_count > 0)
-                    md[m].md_count--;
-            }
-            if (mods[m]->m_trigger & TRIG_FD)
-                for (i = 0; (fd = md[m].md_fds[i]); i++) {
-                    if (FD_ISSET(fd, &fds)) {
-                        if (mods[m]->m_free && strs[m])
-                            mods[m]->m_free(strs[m]);
-                        strs[m] = mods[m]->m_run(mods[m]->m_data, fd);
-                        dirty = true;
-                    }
-                }
-        }
         do {
             unsigned wait = refresh_delay + (start - time);
-            FD_ZERO(&fds); FD_SET(xcnf.xfd, &fds);
-            ret = select(xcnf.xfd + 1, &fds, 0, 0,
+            fd_set fds = modfds;
+            int ret;
+
+            fds = modfds;
+            ret = select(maxfd, &fds, 0, 0,
                          &(struct timeval){ .tv_usec = wait });
-            if (dirty || (ret > 0 && xdirty())) {
+
+            if (ret < 0) {
+                if (errno == EAGAIN || errno == EINTR)
+                    continue;
+                complain("Select failed.");
+                return;
+            }
+
+            for (struct ModRuntime * m = fstfd; m; m = m->mr_nextfd)
+                for (int fd, i = 0; (fd = m->mr_data.md_fds[i]) > 0; i++)
+                    if (FD_ISSET(fd, &fds)) {
+                        const struct ModInfo * mod = m->mr_info;
+                        if (mod->m_free && strs[m->mr_id])
+                            mod->m_free(strs[m->mr_id]);
+                        strs[m->mr_id] = mod->m_run(mod->m_data, fd);
+                        dirty = true;
+                    }
+            if (dirty ||
+                (ret > 0 && FD_ISSET(xcnf.xfd, &fds) && xdirty())) {
                 xdrawbar(strs, packs);
                 dirty = false;
             }
         } while ((time = utime()) < start + refresh_delay);
         start = time;
-        puts("looping");
     }
 }
 
