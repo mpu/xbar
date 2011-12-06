@@ -5,6 +5,7 @@
 #include "mod_cpu.h"
 #include "mod_bat.h"
 #include "mod_cmd.h"
+#include "mod_read.h"
 
 /* Bar font. */
 static const char font[] = "fixed";
@@ -17,6 +18,7 @@ static struct Module modules[] = {
     { .mod = MOD_SAY("^fg(green)xbar^fg() 2011"), .pack = PACK_RIGHT },
     { .mod = MOD_CMD("uname -sr", -1), .pack = PACK_RIGHT },
     { .mod = MOD_TIME(), .pack = PACK_RIGHT },
+    { .mod = MOD_READ(), .pack = PACK_LEFT },
     { .mod = MOD_CPU("cpu: %u%%"), .pack = PACK_LEFT },
     { .mod = MOD_BAT("BAT0", "bat: %u%%"), .pack = PACK_LEFT },
 };

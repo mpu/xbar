@@ -1,7 +1,8 @@
 mod_bat.o: mod_bat.c xbar.h mod_bat.h
 mod_cmd.o: mod_cmd.c xbar.h mod_cmd.h
 mod_cpu.o: mod_cpu.c xbar.h mod_cpu.h
+mod_read.o: mod_read.c xbar.h mod_read.h
 mod_say.o: mod_say.c xbar.h mod_say.h
 mod_time.o: mod_time.c xbar.h mod_time.h
 xbar.o: xbar.c xbar.h config.h mod_say.h mod_time.h mod_cpu.h mod_bat.h \
-  mod_cmd.h
+  mod_cmd.h mod_read.h
