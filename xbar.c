@@ -169,8 +169,8 @@ mloop(void)
 
         for (struct ModRuntime * m = fsttime; m; m = m->mr_nexttime)
             if (m->mr_data.md_count == 0) {
-                const struct ModInfo * mod = m->mr_info;
-                if (mod->m_run(&strs[m->mr_id], mod->m_data, -1) != ST_OK)
+                const struct ModInfo * mi = m->mr_info;
+                if (mi->m_run(&strs[m->mr_id], mi->m_data, -1) != ST_OK)
                     strs[m->mr_id] = errstr;
                 dirty = true;
             } else if (m->mr_data.md_count > 0)
@@ -195,9 +195,9 @@ mloop(void)
             for (struct ModRuntime * m = fstfd; m; m = m->mr_nextfd)
                 for (int fd, i = 0; (fd = m->mr_data.md_fds[i]) >= 0; i++)
                     if (FD_ISSET(fd, &fds)) {
-                        const struct ModInfo * mod = m->mr_info;
+                        const struct ModInfo * mi = m->mr_info;
                         enum ModStatus st;
-                        st = mod->m_run(&strs[m->mr_id], mod->m_data, fd);
+                        st = mi->m_run(&strs[m->mr_id], mi->m_data, fd);
                         switch (st) {
                         case ST_OK:
                             break;
