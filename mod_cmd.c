@@ -45,18 +45,16 @@ mod_cmd_fork_process(pid_t * ppid, int * pfd, const char * cmd)
 bool
 mod_cmd_init(struct ModData * pmd)
 {
-    struct ModData md = {
+    *pmd = (struct ModData) {
         .md_count = 0,
         .md_fds = 0,
     };
-    *pmd = md;
     return true;
 }
 
-const char *
-mod_cmd_run(void * p, int ufd)
+enum ModStatus
+mod_cmd_run(const char ** ret, void * p, int ufd)
 {
-    static const char err[] = "mod_cmd: Error";
     static char line[LINE_LEN];
     char * cr;
     ssize_t rd;
@@ -65,16 +63,17 @@ mod_cmd_run(void * p, int ufd)
 
     (void) ufd;
     if (!mod_cmd_fork_process(&pid, &fd, (const char *)p))
-        return err;
+        return ST_ERR;
     rd = read(fd, line, sizeof line - 1);
     close(fd);
     waitpid(pid, &status, 0);
     if (rd < 0) {
         perror("mod_cmd_run");
-        return err;
+        return ST_ERR;
     }
     line[rd] = 0;
     if ((cr = strchr(line, '\n')))
         *cr = 0;
-    return line;
+    *ret = line;
+    return ST_OK;
 }

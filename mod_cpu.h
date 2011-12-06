@@ -4,7 +4,7 @@
 #include "xbar.h"
 
 extern bool mod_cpu_init(struct ModData *);
-extern const char * mod_cpu_run(void *, int);
+extern enum ModStatus mod_cpu_run(const char **, void *, int);
 
 #define MOD_CPU(fmt)            \
     (struct ModInfo) {          \
@@ -14,7 +14,6 @@ extern const char * mod_cpu_run(void *, int);
         .m_data = (void *)fmt,  \
         .m_init = mod_cpu_init, \
         .m_run = mod_cpu_run,   \
-        .m_free = NULL,         \
     }
 
 #endif /* ndef MOD_CPU__H */

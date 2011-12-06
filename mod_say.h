@@ -4,7 +4,7 @@
 #include "xbar.h"
 
 extern bool mod_say_init(struct ModData *);
-extern const char * mod_say_run(void *, int);
+extern enum ModStatus mod_say_run(const char **, void *, int);
 
 #define MOD_SAY(s)              \
     (struct ModInfo) {          \
@@ -14,7 +14,6 @@ extern const char * mod_say_run(void *, int);
         .m_data = (void *)s,    \
         .m_init = mod_say_init, \
         .m_run = mod_say_run,   \
-        .m_free = NULL,         \
     }
 
 #endif /* ndef MOD_SAY__H */

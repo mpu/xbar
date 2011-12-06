@@ -35,16 +35,15 @@ mod_cpu_fetch(struct CpuInfo * load)
 bool
 mod_cpu_init(struct ModData * pmd)
 {
-    struct ModData md = {
+    *pmd = (struct ModData) {
         .md_count = 0,
         .md_fds = 0,
     };
-    *pmd = md;
     return true;
 }
 
-const char *
-mod_cpu_run(void * p, int fd)
+enum ModStatus
+mod_cpu_run(const char ** ret, void * p, int fd)
 {
     static const char up[] = "Updating...";
     static char buf[32];
@@ -53,11 +52,12 @@ mod_cpu_run(void * p, int fd)
     (void) fd;
     if (last_info.cpu_tot == 0) {
         mod_cpu_fetch(&last_info);
-        return up;
+        *ret = up;
+        return ST_OK;
     }
     if (!mod_cpu_fetch(&info)) {
         fputs("Cannot fetch cpu info.\n", stderr);
-        return up;
+        return ST_ERR;
     }
     if (info.cpu_tot != last_info.cpu_tot)
         last_load = 100 * (info.cpu_user      + info.cpu_sys
@@ -65,5 +65,6 @@ mod_cpu_run(void * p, int fd)
                           (info.cpu_tot - last_info.cpu_tot);
     snprintf(buf, sizeof buf, (const char *)p, last_load);
     last_info = info;
-    return buf;
+    *ret = buf;
+    return ST_OK;
 }

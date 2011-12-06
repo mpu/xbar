@@ -138,6 +138,7 @@ mloop(void)
     struct ModRuntime mods[LEN(modules)];
     struct ModRuntime * fsttime, * fstfd;
     const char * strs[LEN(modules) + 1];
+    const char * errstr = "error";
     enum Pack packs[LEN(modules)];
     long long start = utime();
     fd_set modfds;
@@ -148,13 +149,15 @@ mloop(void)
     nmods = minit(mods, &fsttime, &fstfd);
     strs[nmods] = NULL;
     for (unsigned m = 0; m < nmods; m++) {
+        const struct ModInfo * mi = mods[m].mr_info;
         assert(mods[m].mr_id == m); // Simple (programmer's) sanity check.
-        strs[m] = mods[m].mr_info->m_run(mods[m].mr_info->m_data, -1);
+        if (mi->m_run(&strs[m], mi->m_data, -1) != ST_OK)
+            strs[m] = errstr;
         packs[m] = mods[m].mr_pack;
     }
     FD_ZERO(&modfds); FD_SET(xcnf.xfd, &modfds);
     for (struct ModRuntime * m = fstfd; m; m = m->mr_nextfd)
-        for (int fd, i = 0; (fd = m->mr_data.md_fds[i]) > 0; i++) {
+        for (int fd, i = 0; (fd = m->mr_data.md_fds[i]) >= 0; i++) {
             if (fd > maxfd)
                 maxfd = fd;
             FD_SET(fd, &modfds);
@@ -167,9 +170,8 @@ mloop(void)
         for (struct ModRuntime * m = fsttime; m; m = m->mr_nexttime)
             if (m->mr_data.md_count == 0) {
                 const struct ModInfo * mod = m->mr_info;
-                if (mod->m_free && strs[m->mr_id])
-                    mod->m_free(strs[m->mr_id]);
-                strs[m->mr_id] = mod->m_run(mod->m_data, -1);
+                if (mod->m_run(&strs[m->mr_id], mod->m_data, -1) != ST_OK)
+                    strs[m->mr_id] = errstr;
                 dirty = true;
             } else if (m->mr_data.md_count > 0)
                 m->mr_data.md_count--;
@@ -191,12 +193,21 @@ mloop(void)
             }
 
             for (struct ModRuntime * m = fstfd; m; m = m->mr_nextfd)
-                for (int fd, i = 0; (fd = m->mr_data.md_fds[i]) > 0; i++)
+                for (int fd, i = 0; (fd = m->mr_data.md_fds[i]) >= 0; i++)
                     if (FD_ISSET(fd, &fds)) {
                         const struct ModInfo * mod = m->mr_info;
-                        if (mod->m_free && strs[m->mr_id])
-                            mod->m_free(strs[m->mr_id]);
-                        strs[m->mr_id] = mod->m_run(mod->m_data, fd);
+                        enum ModStatus st;
+                        st = mod->m_run(&strs[m->mr_id], mod->m_data, fd);
+                        switch (st) {
+                        case ST_OK:
+                            break;
+                        case ST_ERR:
+                            strs[m->mr_id] = errstr;
+                            break;
+                        case ST_EOF:
+                            FD_CLR(fd, &modfds);
+                            break;
+                        }
                         dirty = true;
                     }
             if (dirty ||

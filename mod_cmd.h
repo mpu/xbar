@@ -4,7 +4,7 @@
 #include "xbar.h"
 
 extern bool mod_cmd_init(struct ModData *);
-extern const char * mod_cmd_run(void *, int);
+extern enum ModStatus mod_cmd_run(const char **, void *, int);
 
 #define MOD_CMD(cmd, period)    \
     (struct ModInfo) {          \
@@ -14,7 +14,6 @@ extern const char * mod_cmd_run(void *, int);
         .m_data = (void *)cmd,  \
         .m_init = mod_cmd_init, \
         .m_run = mod_cmd_run,   \
-        .m_free = NULL,         \
     }
 
 #endif /* ndef MOD_CMD__H */

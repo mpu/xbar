@@ -4,7 +4,7 @@
 #include "xbar.h"
 
 extern bool mod_time_init(struct ModData *);
-extern const char * mod_time_run(void *, int);
+extern enum ModStatus mod_time_run(const char **, void *, int);
 
 #define MOD_TIME()                      \
     (struct ModInfo) {                  \
@@ -14,7 +14,6 @@ extern const char * mod_time_run(void *, int);
         .m_data = 0,                    \
         .m_init = mod_time_init,        \
         .m_run = mod_time_run,          \
-        .m_free = NULL,                 \
     }
 
 #endif /* ndef MOD_TIME__H */

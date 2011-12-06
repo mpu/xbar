@@ -8,30 +8,28 @@
 bool
 mod_bat_init(struct ModData * pmd)
 {
-    struct ModData md = {
+    *pmd = (struct ModData) {
         .md_count = 20,
         .md_fds = 0,
     };
-    *pmd = md;
     return true;
 }
 
-const char *
-mod_bat_run(void * p, int fd)
+enum ModStatus
+mod_bat_run(const char ** ret, void * p, int fd)
 {
     static char buf[32];
-    static const char * err = "mod_bat: Error";
     const struct BatData * data = p;
     const char prefix[] = "/sys/class/power_supply/";
     const size_t prefix_len = sizeof prefix + strlen(data->bat) - 1;
     char * fname;
-    const char * ret = buf;
+    enum ModStatus status = ST_OK;
     FILE * fnow, * ffull;
     unsigned chnow, chfull;
 
     (void) fd;
     if ((fname = malloc(prefix_len + 1 + 12)) == NULL)
-        return err;
+        return ST_ERR;
     strcpy(fname, prefix);
     strcat(fname, data->bat);
     strcpy(&fname[prefix_len], "/charge_now");
@@ -42,10 +40,11 @@ mod_bat_run(void * p, int fd)
         fscanf(fnow, "%u", &chnow) < 1 ||
         fscanf(ffull, "%u", &chfull) < 1 ||
         chfull == 0) {
-        ret = err;
+        status = ST_ERR;
         goto eio;
     }
     snprintf(buf, sizeof buf, data->fmt, 100 * chnow / chfull);
+    *ret = buf;
 
 eio:
     free(fname);
@@ -53,5 +52,5 @@ eio:
         fclose(fnow);
     if (ffull)
         fclose(ffull);
-    return ret;
+    return status;
 }
