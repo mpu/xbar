@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <sys/select.h>
 #include <sys/time.h>
+#include <unistd.h>
 
 #include <X11/Xlib.h>
 
@@ -16,7 +17,7 @@
 #define LEN(a) (sizeof a / sizeof a[0])
 
 /* MAX_CMDS - Maximum number of consecutive commands in a string given to
- * xputfstr. This can be customized in "config.h".
+ * mparse. This can be customized in "config.h".
  */
 #define MAX_CMDS 32
 
@@ -39,6 +40,17 @@ struct ModRuntime {
     const struct ModInfo *      mr_info;
     struct ModRuntime *         mr_nextfd;
     struct ModRuntime *         mr_nexttime;
+};
+
+struct DrawData {
+    unsigned long       dr_fg;
+    unsigned            dr_len;
+    const char *        dr_str;
+};
+
+struct RenderStr {
+    struct DrawData *   rs_data;
+    unsigned            rs_cnt;
 };
 
 static struct {
@@ -66,13 +78,16 @@ static long long utime(void);
 
 static unsigned minit(struct ModRuntime *,
                       struct ModRuntime **, struct ModRuntime **);
+static int mrun(struct RenderStr *, const struct ModInfo *, int);
+static bool mparse(struct RenderStr *, const char *);
 static void mloop(void);
 
 static bool xdirty(void);
 static void xputstr(int, unsigned long, const char *, int);
-static void xputfstr(int *, enum Pack, const char *);
+static void xputrs(int *, enum Pack, struct RenderStr *);
+static void xputs(int *, enum Pack, const char *);
 static void xclearbar(void);
-static void xdrawbar(const char **, const enum Pack *);
+static void xdrawbar(struct RenderStr *, const enum Pack *, unsigned);
 static unsigned long xgetpixel(const char *, unsigned long);
 static bool xinit(void);
 static void xdeinit(void);
@@ -131,14 +146,40 @@ minit(struct ModRuntime * marr,
     return mid;
 }
 
+static int
+mrun(struct RenderStr * rs, const struct ModInfo * mi, int fd)
+{
+    enum ModStatus st;
+    const char * retstr;
+
+    if (rs->rs_data != NULL)
+        free(rs->rs_data);
+    st = mi->m_run(&retstr, mi->m_data, fd);
+    if (st == ST_ERR) {
+        struct DrawData * pdr = malloc(sizeof(struct DrawData));
+        if (pdr == NULL)
+            return -1;
+        *pdr = (struct DrawData) {
+            .dr_fg = xcnf.fg,
+            .dr_len = sizeof "error" - 1,
+            .dr_str = "error"
+        };
+        rs->rs_data = pdr;
+        rs->rs_cnt = 1;
+        return -1;
+    }
+    if (!mparse(rs, retstr))
+        return -1;
+    return st;
+}
+
 static void
 mloop(void)
 {
     unsigned nmods;
     struct ModRuntime mods[LEN(modules)];
     struct ModRuntime * fsttime, * fstfd;
-    const char * strs[LEN(modules) + 1];
-    const char * errstr = "error";
+    struct RenderStr rss[LEN(modules)];
     enum Pack packs[LEN(modules)];
     long long start = utime();
     fd_set modfds;
@@ -147,12 +188,11 @@ mloop(void)
 
     /* Initialize modules. */
     nmods = minit(mods, &fsttime, &fstfd);
-    strs[nmods] = NULL;
     for (unsigned m = 0; m < nmods; m++) {
-        const struct ModInfo * mi = mods[m].mr_info;
         assert(mods[m].mr_id == m); // Simple (programmer's) sanity check.
-        if (mi->m_run(&strs[m], mi->m_data, -1) != ST_OK)
-            strs[m] = errstr;
+        rss[m].rs_data = NULL;
+        if (mrun(&rss[m], mods[m].mr_info, -1) < 0)
+            return;
         packs[m] = mods[m].mr_pack;
     }
     FD_ZERO(&modfds); FD_SET(xcnf.xfd, &modfds);
@@ -169,9 +209,8 @@ mloop(void)
 
         for (struct ModRuntime * m = fsttime; m; m = m->mr_nexttime)
             if (m->mr_data.md_count == 0) {
-                const struct ModInfo * mi = m->mr_info;
-                if (mi->m_run(&strs[m->mr_id], mi->m_data, -1) != ST_OK)
-                    strs[m->mr_id] = errstr;
+                if (mrun(&rss[m->mr_id], m->mr_info, -1) < 0)
+                    return;
                 dirty = true;
             } else if (m->mr_data.md_count > 0)
                 m->mr_data.md_count--;
@@ -196,15 +235,14 @@ mloop(void)
                 for (int fd, i = 0; (fd = m->mr_data.md_fds[i]) >= 0; i++)
                     if (FD_ISSET(fd, &fds)) {
                         const struct ModInfo * mi = m->mr_info;
-                        enum ModStatus st;
-                        st = mi->m_run(&strs[m->mr_id], mi->m_data, fd);
-                        switch (st) {
+                        switch (mrun(&rss[m->mr_id], mi, fd)) {
+                        case -1:
+                            return;
                         case ST_OK:
-                            break;
                         case ST_ERR:
-                            strs[m->mr_id] = errstr;
                             break;
                         case ST_EOF:
+                            close(fd);
                             FD_CLR(fd, &modfds);
                             break;
                         }
@@ -212,7 +250,7 @@ mloop(void)
                     }
             if (dirty ||
                 (ret > 0 && FD_ISSET(xcnf.xfd, &fds) && xdirty())) {
-                xdrawbar(strs, packs);
+                xdrawbar(rss, packs, nmods);
                 dirty = false;
             }
         } while ((time = utime()) < start + refresh_delay);
@@ -234,27 +272,13 @@ xdirty(void)
     return ret;
 }
 
-static void
-xputstr(int x, unsigned long fg, const char * str, int len)
+static bool
+mparse(struct RenderStr * rs, const char * str)
 {
-    const int y = xcnf.fs->max_bounds.ascent + 1;
-
-    assert(len > 0);
-    XSetForeground(xcnf.dsp, xcnf.gc, fg);
-    XDrawString(xcnf.dsp, xcnf.win, xcnf.gc, x , y, str, len);
-}
-
-static void
-xputfstr(int * x, enum Pack pack, const char * str)
-{
-    struct DrawData {
-        unsigned long   fg;
-        int             len;
-        const char *    str;
-    } strings[MAX_CMDS];
+    struct DrawData strings[MAX_CMDS];
     unsigned sid = 0;
     unsigned long fg = xcnf.fg;
-    int len = 0;
+    unsigned len = 0;
     const char * p = str;
 
     while (*p) {
@@ -274,9 +298,9 @@ xputfstr(int * x, enum Pack pack, const char * str)
             break;
         if (len)
             strings[sid++] = (struct DrawData) {
-                .fg = fg,
-                .len = len,
-                .str = str
+                .dr_fg = fg,
+                .dr_len = len,
+                .dr_str = str
             };
         if (strncmp(p + 1, "fg(", 3) == 0) {
             const size_t fg_len = rparen - lparen - 1;
@@ -301,27 +325,74 @@ nextchunk:
     }
     if (len && sid < LEN(strings))
         strings[sid++] = (struct DrawData) {
-            .fg = fg,
-            .len = len,
-            .str = str
+            .dr_fg = fg,
+            .dr_len = len,
+            .dr_str = str
         };
+    if ((rs->rs_data = malloc(sid * sizeof(struct DrawData))) == NULL) {
+        complain("Cannot allocate draw data structures.");
+        return false;
+    }
+    memcpy(rs->rs_data, strings, sid * sizeof(struct DrawData));
+    rs->rs_cnt = sid;
+    return true;
+}
+
+static void
+xputstr(int x, unsigned long fg, const char * str, int len)
+{
+    const int y = xcnf.fs->max_bounds.ascent + 1;
+
+    assert(len > 0);
+    XSetForeground(xcnf.dsp, xcnf.gc, fg);
+    XDrawString(xcnf.dsp, xcnf.win, xcnf.gc, x , y, str, len);
+}
+
+static void
+xputrs(int * x, enum Pack pack, struct RenderStr * rs)
+{
+    const unsigned cnt = rs->rs_cnt;
+
+    if (cnt == 0)
+        return;
+    assert(rs->rs_data != NULL);
+
     switch (pack) {
     case PACK_LEFT:
-        for (unsigned i = 0; i < sid; i++) {
+        for (unsigned i = 0; i < cnt; i++) {
+            const struct DrawData * dr = &rs->rs_data[i];
             const int wid =
-                XTextWidth(xcnf.fs, strings[i].str, strings[i].len);
-            xputstr(*x, strings[i].fg, strings[i].str, strings[i].len);
+                XTextWidth(xcnf.fs, dr->dr_str, dr->dr_len);
+            xputstr(*x, dr->dr_fg, dr->dr_str, dr->dr_len);
             *x += wid;
         }
         break;
     case PACK_RIGHT:
-        for (unsigned j = 0, i = sid - 1; j < sid; j++, i--) {
+        for (unsigned j = 0, i = cnt - 1; j < cnt; j++, i--) {
+            const struct DrawData * dr = &rs->rs_data[i];
             const int wid =
-                XTextWidth(xcnf.fs, strings[i].str, strings[i].len);
+                XTextWidth(xcnf.fs, dr->dr_str, dr->dr_len);
             *x -= wid;
-            xputstr(*x, strings[i].fg, strings[i].str, strings[i].len);
+            xputstr(*x, dr->dr_fg, dr->dr_str, dr->dr_len);
         }
         break;
+    }
+}
+
+static void
+xputs(int * x, enum Pack pack, const char * str)
+{
+    const size_t len = strlen(str);
+    const int wid = XTextWidth(xcnf.fs, str, len);
+
+    switch (pack) {
+    case PACK_LEFT:
+        xputstr(*x, xcnf.fg, str, len);
+        *x += wid;
+        break;
+    case PACK_RIGHT:
+        *x -= wid;
+        xputstr(*x, xcnf.fg, str, len);
     }
 }
 
@@ -335,19 +406,19 @@ xclearbar(void)
 }
 
 static void
-xdrawbar(const char ** strs, const enum Pack * packs)
+xdrawbar(struct RenderStr * dr, const enum Pack * packs, unsigned nitems)
 {
     bool first[2] = { true, true };
     int x[2] = { [PACK_RIGHT] = xcnf.dspw };
 
     xclearbar();
-    for (; *strs; packs++, strs++) {
+    for (unsigned i = 0; i < nitems; i++, dr++, packs++) {
         assert(*packs < 2);
         if (!first[*packs])
-            xputfstr(&x[*packs], *packs, sep);
+            xputs(&x[*packs], *packs, sep);
         else
             first[*packs] = false;
-        xputfstr(&x[*packs], *packs, *strs);
+        xputrs(&x[*packs], *packs, dr);
     }
     XFlush(xcnf.dsp);
 }
