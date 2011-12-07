@@ -34,12 +34,12 @@ struct Module {
 #include "config.h"
 
 struct ModRuntime {
-    unsigned                    mr_id;
-    enum Pack                   mr_pack;
-    struct ModData              mr_data;
-    const struct ModInfo *      mr_info;
-    struct ModRuntime *         mr_nextfd;
-    struct ModRuntime *         mr_nexttime;
+    unsigned                    id;
+    enum Pack                   pack;
+    struct ModData              data;
+    const struct ModInfo *      info;
+    struct ModRuntime *         nextfd;
+    struct ModRuntime *         nexttime;
 };
 
 static struct {
@@ -109,21 +109,21 @@ minit(struct ModRuntime * marr,
     unsigned mid = 0;
 
     for (unsigned m = 0; m < LEN(modules); m++) {
-        if (!modules[m].mod.m_init(&marr->mr_data)) {
+        if (!modules[m].mod.init(&marr->data)) {
             complain("Cannot init module.");
             continue;
         }
-        marr->mr_id = mid;
-        marr->mr_info = &modules[m].mod;
-        marr->mr_pack = modules[m].pack;
-        marr->mr_nextfd = marr->mr_nexttime = NULL;
-        if (modules[m].mod.m_trigger & TRIG_FD) {
+        marr->id = mid;
+        marr->info = &modules[m].mod;
+        marr->pack = modules[m].pack;
+        marr->nextfd = marr->nexttime = NULL;
+        if (modules[m].mod.trigger & TRIG_FD) {
             *fstfd = marr;
-            fstfd = &marr->mr_nextfd;
+            fstfd = &marr->nextfd;
         }
-        if (modules[m].mod.m_trigger & TRIG_TIME) {
+        if (modules[m].mod.trigger & TRIG_TIME) {
             *fsttime = marr;
-            fsttime = &marr->mr_nexttime;
+            fsttime = &marr->nexttime;
         }
         marr++;
         mid++;
@@ -150,15 +150,15 @@ mloop(void)
     nmods = minit(mods, &fsttime, &fstfd);
     strs[nmods] = NULL;
     for (unsigned m = 0; m < nmods; m++) {
-        const struct ModInfo * mi = mods[m].mr_info;
-        assert(mods[m].mr_id == m); // Simple (programmer's) sanity check.
-        if (mi->m_run(&strs[m], mi->m_data, -1) != ST_OK)
+        const struct ModInfo * mi = mods[m].info;
+        assert(mods[m].id == m); // Simple (programmer's) sanity check.
+        if (mi->run(&strs[m], mi->data, -1) != ST_OK)
             strs[m] = errstr;
-        packs[m] = mods[m].mr_pack;
+        packs[m] = mods[m].pack;
     }
     FD_ZERO(&modfds); FD_SET(xcnf.xfd, &modfds);
-    for (struct ModRuntime * m = fstfd; m; m = m->mr_nextfd)
-        for (int fd, i = 0; (fd = m->mr_data.md_fds[i]) >= 0; i++) {
+    for (struct ModRuntime * m = fstfd; m; m = m->nextfd)
+        for (int fd, i = 0; (fd = m->data.fds[i]) >= 0; i++) {
             if (fd > maxfd)
                 maxfd = fd;
             FD_SET(fd, &modfds);
@@ -168,14 +168,14 @@ mloop(void)
     for (;;) {
         long long time = start;
 
-        for (struct ModRuntime * m = fsttime; m; m = m->mr_nexttime)
-            if (m->mr_data.md_count == 0) {
-                const struct ModInfo * mi = m->mr_info;
-                if (mi->m_run(&strs[m->mr_id], mi->m_data, -1) != ST_OK)
-                    strs[m->mr_id] = errstr;
+        for (struct ModRuntime * m = fsttime; m; m = m->nexttime)
+            if (m->data.count == 0) {
+                const struct ModInfo * mi = m->info;
+                if (mi->run(&strs[m->id], mi->data, -1) != ST_OK)
+                    strs[m->id] = errstr;
                 dirty = true;
-            } else if (m->mr_data.md_count > 0)
-                m->mr_data.md_count--;
+            } else if (m->data.count > 0)
+                m->data.count--;
 
         do {
             unsigned wait = refresh_delay + (start - time);
@@ -193,17 +193,15 @@ mloop(void)
                 return;
             }
 
-            for (struct ModRuntime * m = fstfd; m; m = m->mr_nextfd)
-                for (int fd, i = 0; (fd = m->mr_data.md_fds[i]) >= 0; i++)
+            for (struct ModRuntime * m = fstfd; m; m = m->nextfd)
+                for (int fd, i = 0; (fd = m->data.fds[i]) >= 0; i++)
                     if (FD_ISSET(fd, &fds)) {
-                        const struct ModInfo * mi = m->mr_info;
-                        enum ModStatus st;
-                        st = mi->m_run(&strs[m->mr_id], mi->m_data, fd);
-                        switch (st) {
+                        const struct ModInfo * mi = m->info;
+                        switch (mi->run(&strs[m->id], mi->data, fd)) {
                         case ST_OK:
                             break;
                         case ST_ERR:
-                            strs[m->mr_id] = errstr;
+                            strs[m->id] = errstr;
                             break;
                         case ST_EOF:
                             close(fd);
@@ -307,6 +305,7 @@ nextchunk:
             .len = len,
             .str = str
         };
+
     switch (pack) {
     case PACK_LEFT:
         for (unsigned i = 0; i < sid; i++) {

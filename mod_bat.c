@@ -9,8 +9,8 @@ bool
 mod_bat_init(struct ModData * pmd)
 {
     *pmd = (struct ModData) {
-        .md_count = 20,
-        .md_fds = 0,
+        .count = 20,
+        .fds = 0,
     };
     return true;
 }

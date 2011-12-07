@@ -17,16 +17,16 @@ enum ModStatus {
 };
 
 struct ModData {
-    int         md_count;
-    int *       md_fds;
+    int         count;
+    int *       fds;
 };
 
 struct ModInfo {
-    const char *        m_name;
-    int                 m_period;
-    unsigned int        m_trigger;
-    void *              m_data;
-    bool                (*m_init)(struct ModData *);
-    enum ModStatus      (*m_run)(const char **, void *, int);
+    const char *        name;
+    int                 period;
+    unsigned int        trigger;
+    void *              data;
+    bool                (*init)(struct ModData *);
+    enum ModStatus      (*run)(const char **, void *, int);
 };
 #endif /* ndef XBAR__H */

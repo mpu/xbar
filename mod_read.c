@@ -43,8 +43,8 @@ mod_read_init(struct ModData * pmd)
 {
     static int fds[] = { STDIN_FILENO, -1 };
     *pmd = (struct ModData) {
-        .md_count = -1,
-        .md_fds = fds,
+        .count = -1,
+        .fds = fds,
     };
     return true;
 }

@@ -46,8 +46,8 @@ bool
 mod_cmd_init(struct ModData * pmd)
 {
     *pmd = (struct ModData) {
-        .md_count = 0,
-        .md_fds = 0,
+        .count = 0,
+        .fds = 0,
     };
     return true;
 }

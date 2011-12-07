@@ -5,8 +5,8 @@ bool
 mod_say_init(struct ModData * pmd)
 {
     *pmd = (struct ModData) {
-        .md_count = -1,
-        .md_fds = 0,
+        .count = -1,
+        .fds = 0,
     };
     return true;
 }
