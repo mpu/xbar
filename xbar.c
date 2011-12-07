@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <sys/select.h>
 #include <sys/time.h>
+#include <unistd.h>
 
 #include <X11/Xlib.h>
 
@@ -205,6 +206,7 @@ mloop(void)
                             strs[m->mr_id] = errstr;
                             break;
                         case ST_EOF:
+                            close(fd);
                             FD_CLR(fd, &modfds);
                             break;
                         }
