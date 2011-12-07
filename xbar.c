@@ -210,8 +210,7 @@ mloop(void)
                         }
                         dirty = true;
                     }
-            if (dirty ||
-                (ret > 0 && FD_ISSET(xcnf.xfd, &fds) && xdirty())) {
+            if (dirty || (FD_ISSET(xcnf.xfd, &fds) && xdirty())) {
                 xdrawbar(strs, packs);
                 dirty = false;
             }
