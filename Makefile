@@ -13,6 +13,9 @@ OBJS    = xbar.o mod_say.o mod_time.o mod_cpu.o mod_bat.o mod_cmd.o mod_read.o
 $(EXE): $(OBJS)
 	$(CC) $(LDFLAGS) -o $(EXE) $(OBJS)
 
+config.h:
+	cp config.h.def config.h
+
 clean:
 	rm -f *.o $(EXE)
 
@@ -22,7 +25,7 @@ install:
 .c.o:
 	$(CC) $(CFLAGS) -c $<
 
-depend:
+depend: config.h
 	$(CC) -MM *.c > .depend
 
 include .depend

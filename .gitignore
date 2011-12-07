@@ -1,4 +1,5 @@
 xbar
+config.h
 tags
 *.o
 *.sw[po]
