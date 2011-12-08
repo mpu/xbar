@@ -36,6 +36,7 @@ struct Module {
 struct ModRuntime {
     unsigned                    id;
     enum Pack                   pack;
+    const char *                str;
     struct ModData              data;
     const struct ModInfo *      info;
     struct ModRuntime *         nextfd;
@@ -67,13 +68,14 @@ static long long utime(void);
 
 static unsigned minit(struct ModRuntime *,
                       struct ModRuntime **, struct ModRuntime **);
+static enum ModStatus mrun(struct ModRuntime *, int);
 static void mloop(void);
 
 static bool xdirty(void);
 static void xputstr(int, unsigned long, const char *, int);
 static void xputfstr(int *, enum Pack, const char *);
 static void xclearbar(void);
-static void xdrawbar(const char **, const enum Pack *);
+static void xdrawbar(const struct ModRuntime *, unsigned);
 static unsigned long xgetpixel(const char *, unsigned long);
 static bool xinit(void);
 static void xdeinit(void);
@@ -132,15 +134,24 @@ minit(struct ModRuntime * marr,
     return mid;
 }
 
+static enum ModStatus
+mrun(struct ModRuntime * mr, int fd)
+{
+    static const char * errstr = "error";
+    enum ModStatus st;
+
+    st = mr->info->run(&mr->str, mr->info->data, fd);
+    if (st == ST_ERR)
+        mr->str = errstr;
+    return st;
+}
+
 static void
 mloop(void)
 {
     unsigned nmods;
     struct ModRuntime mods[LEN(modules)];
     struct ModRuntime * fsttime, * fstfd;
-    const char * strs[LEN(modules) + 1];
-    const char * errstr = "error";
-    enum Pack packs[LEN(modules)];
     long long start = utime();
     fd_set modfds;
     int maxfd = xcnf.xfd;
@@ -148,14 +159,8 @@ mloop(void)
 
     /* Initialize modules. */
     nmods = minit(mods, &fsttime, &fstfd);
-    strs[nmods] = NULL;
-    for (unsigned m = 0; m < nmods; m++) {
-        const struct ModInfo * mi = mods[m].info;
-        assert(mods[m].id == m); // Simple (programmer's) sanity check.
-        if (mi->run(&strs[m], mi->data, -1) != ST_OK)
-            strs[m] = errstr;
-        packs[m] = mods[m].pack;
-    }
+    for (unsigned m = 0; m < nmods; m++)
+        mrun(&mods[m], -1);
     FD_ZERO(&modfds); FD_SET(xcnf.xfd, &modfds);
     for (struct ModRuntime * m = fstfd; m; m = m->nextfd)
         for (int fd, i = 0; (fd = m->data.fds[i]) >= 0; i++) {
@@ -170,9 +175,7 @@ mloop(void)
 
         for (struct ModRuntime * m = fsttime; m; m = m->nexttime)
             if (m->data.count == 0) {
-                const struct ModInfo * mi = m->info;
-                if (mi->run(&strs[m->id], mi->data, -1) != ST_OK)
-                    strs[m->id] = errstr;
+                mrun(m, -1);
                 dirty = true;
             } else if (m->data.count > 0)
                 m->data.count--;
@@ -196,22 +199,14 @@ mloop(void)
             for (struct ModRuntime * m = fstfd; m; m = m->nextfd)
                 for (int fd, i = 0; (fd = m->data.fds[i]) >= 0; i++)
                     if (FD_ISSET(fd, &fds)) {
-                        const struct ModInfo * mi = m->info;
-                        switch (mi->run(&strs[m->id], mi->data, fd)) {
-                        case ST_OK:
-                            break;
-                        case ST_ERR:
-                            strs[m->id] = errstr;
-                            break;
-                        case ST_EOF:
+                        if (mrun(m, fd) == ST_EOF) {
                             close(fd);
                             FD_CLR(fd, &modfds);
-                            break;
                         }
                         dirty = true;
                     }
             if (dirty || (FD_ISSET(xcnf.xfd, &fds) && xdirty())) {
-                xdrawbar(strs, packs);
+                xdrawbar(mods, nmods);
                 dirty = false;
             }
         } while ((time = utime()) < start + refresh_delay);
@@ -335,19 +330,20 @@ xclearbar(void)
 }
 
 static void
-xdrawbar(const char ** strs, const enum Pack * packs)
+xdrawbar(const struct ModRuntime *mr, unsigned count)
 {
     bool first[2] = { true, true };
     int x[2] = { [PACK_RIGHT] = xcnf.dspw };
 
     xclearbar();
-    for (; *strs; packs++, strs++) {
-        assert(*packs < 2);
-        if (!first[*packs])
-            xputfstr(&x[*packs], *packs, sep);
+    while (count-- > 0) {
+        assert(mr->pack < 2);
+        if (!first[mr->pack])
+            xputfstr(&x[mr->pack], mr->pack, sep);
         else
-            first[*packs] = false;
-        xputfstr(&x[*packs], *packs, *strs);
+            first[mr->pack] = false;
+        xputfstr(&x[mr->pack], mr->pack, mr->str);
+        mr++;
     }
     XFlush(xcnf.dsp);
 }
