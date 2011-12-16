@@ -18,20 +18,26 @@ static bool mod_read_input_line(struct LineData *, char *, int);
 static bool
 mod_read_input_line(struct LineData * ld, char * line, int len)
 {
-    char * pcr;
-    size_t cr;
+    size_t bol, cr;
     ssize_t ret;
 
     ret = read(STDIN_FILENO, &ld->buf[ld->sz], BUF_LEN - ld->sz);
     if (ret <= 0 && ld->sz == 0)
         return ret == 0;
     ld->sz += ret;
-    if ((pcr = memchr(ld->buf, '\n', ld->sz)))
-        cr = pcr - ld->buf;
-    else
+    cr = ld->sz - 1;
+    while (cr > 0 && ld->buf[cr] != '\n')
+        cr--;
+    if (cr) { // Find beginning of line.
+        bol = cr;
+        while (bol > 0 && ld->buf[bol - 1] != '\n')
+            bol--;
+    } else { // Otherwise, take the whole line.
         cr = ld->sz - 1;
+        bol = cr && ld->buf[0] == '\n' ? 1 : 0;
+    }
     ld->buf[cr] = 0;
-    strncpy(line, ld->buf, len);
+    strncpy(line, &ld->buf[bol], len);
     line[len - 1] = 0;
     memmove(ld->buf, &ld->buf[cr + 1], BUF_LEN - cr - 1);
     ld->sz -= cr + 1;
